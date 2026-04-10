@@ -54,7 +54,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Main content sits above the footer so the footer reveals underneath */
 main {
   position: relative;
   z-index: 1;
@@ -1401,13 +1400,9 @@ textarea.form-control {
 /* ========================================
    14. FOOTER
    ======================================== */
-/* Footer reveal: sits behind main content, revealed as you scroll past */
 .site-footer {
-  position: -webkit-sticky;
-  position: sticky;
-  bottom: 0;
-  left: 0;
-  z-index: 0;
+  position: relative;
+  z-index: 1;
   background: rgba(0, 0, 0, 0.3);
   padding-top: 3.5rem;
 }
