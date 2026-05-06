@@ -434,6 +434,13 @@
 
   if (!form) return;
 
+  // Stamp page_url + form_rendered_at on render so the n8n time-trap can
+  // verify the visitor took at least 3 seconds to fill the form.
+  var pageUrlField = form.querySelector('input[name="page_url"]');
+  var renderedAtField = form.querySelector('input[name="form_rendered_at"]');
+  if (pageUrlField) pageUrlField.value = location.href;
+  if (renderedAtField) renderedAtField.value = String(Date.now());
+
   ['contact-name', 'contact-email', 'contact-phone', 'contact-message'].forEach(function (id) {
     var field = document.getElementById(id);
     if (!field) return;
@@ -455,20 +462,35 @@
 
     setLoading(true);
 
-    var data = new URLSearchParams(new FormData(form));
+    // Capture the lead values now in case we need a mailto: fallback.
+    var name = document.getElementById('contact-name').value.trim();
+    var email = document.getElementById('contact-email').value.trim();
+    var phone = document.getElementById('contact-phone').value.trim();
+    var message = document.getElementById('contact-message').value.trim();
+
+    // Build a JSON body so the n8n webhook gets a clean object.
+    var data = {};
+    new FormData(form).forEach(function (v, k) { data[k] = v; });
+
+    // 6-second timeout via AbortController for cross-browser support.
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function () { controller.abort(); }, 6000);
 
     fetch(form.action, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: data.toString()
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(data),
+      signal: controller.signal
     })
       .then(function (res) {
+        clearTimeout(timeoutId);
         if (!res.ok) throw new Error('Server error: ' + res.status);
         showSuccess();
       })
       .catch(function () {
+        clearTimeout(timeoutId);
         setLoading(false);
-        showServerError();
+        showServerError(name, email, phone, message);
       });
   });
 
@@ -536,12 +558,24 @@
   function showSuccess() {
     setLoading(false);
     form.reset();
-    form.hidden = true;
+    var prompt = document.getElementById('form-prompt');
+    if (prompt) { prompt.hidden = true; } else { form.hidden = true; }
     if (successMsg) { successMsg.hidden = false; }
     if (errorMsg)   { errorMsg.hidden   = true;  }
   }
 
-  function showServerError() {
+  function showServerError(name, email, phone, message) {
+    // Build a mailto: fallback so the lead isn't lost if the webhook fails.
+    var mailto = document.getElementById('mailto-fallback');
+    if (mailto) {
+      var notifyEmailField = form.querySelector('input[name="notify_email"]');
+      var notifyEmail = notifyEmailField ? notifyEmailField.value : '';
+      var subject = encodeURIComponent('Website enquiry from ' + (name || ''));
+      var bodyText = 'Name: ' + (name || '') + '\nEmail: ' + (email || '') + '\nPhone: ' + (phone || '') + '\n\n' + (message || '');
+      mailto.href = 'mailto:' + notifyEmail + '?subject=' + subject + '&body=' + encodeURIComponent(bodyText);
+    }
+    var prompt = document.getElementById('form-prompt');
+    if (prompt) { prompt.hidden = true; } else { form.hidden = true; }
     if (errorMsg)   { errorMsg.hidden   = false; }
     if (successMsg) { successMsg.hidden = true;  }
   }
